@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ใบเสนอราคา</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink: #16222b; --muted: #5b6b76; --line: #d3dae0; --accent: #0e6b5e; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #eef1f4; color: var(--ink); font: 15px/1.55 Sarabun, system-ui, sans-serif; }
+.toolbar { max-width: 800px; margin: 16px auto 0; display: flex; gap: 8px; padding: 0 16px; }
+.toolbar button, .toolbar a { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: #fff; color: var(--ink); text-decoration: none; cursor: pointer; }
+.toolbar .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.page { max-width: 800px; margin: 16px auto; background: #fff; padding: 48px; border: 1px solid var(--line); }
+.head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; border-bottom: 2px solid var(--accent); padding-bottom: 16px; margin-bottom: 24px; }
+h1 { margin: 0; font-size: 1.8rem; color: var(--accent); }
+.head dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 2px 14px; }
+.head dt { color: var(--muted); }
+.head dd { margin: 0; font-weight: 500; text-align: right; }
+.to { margin-bottom: 24px; }
+.to .label { color: var(--muted); font-size: .9rem; }
+.to .name { font-weight: 700; font-size: 1.1rem; }
+.to .addr { white-space: pre-line; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; border-bottom: 1px solid var(--ink); padding: 6px 8px; font-weight: 500; }
+td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.r { text-align: right; white-space: nowrap; }
+.sum { margin: 16px 0 0 auto; width: 280px; }
+.sum div { display: flex; justify-content: space-between; padding: 3px 8px; }
+.sum .total { border-top: 2px solid var(--ink); margin-top: 6px; padding-top: 8px; font-weight: 700; font-size: 1.15rem; }
+.note { margin-top: 28px; white-space: pre-line; }
+.note .label { color: var(--muted); font-size: .9rem; }
+.error { text-align: center; padding: 48px; color: #b3402a; }
+@media print {
+  body { background: #fff; }
+  .toolbar { display: none; }
+  .page { border: 0; margin: 0; max-width: none; padding: 0; }
+  @page { size: A4; margin: 18mm; }
+}
+@media (max-width: 600px) { .page { padding: 20px; } .head { flex-direction: column; } }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <button class="primary" onclick="window.print()">พิมพ์ / บันทึกเป็น PDF</button>
+  <a href="/">กลับ</a>
+</div>
+<div class="page" id="page">กำลังโหลด…</div>
+
+<script>
+const fmt = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+(async () => {
+  const id = new URLSearchParams(location.search).get('id');
+  const page = document.getElementById('page');
+  try {
+    const res = await fetch(`/api/quotes/${encodeURIComponent(id)}`);
+    const q = await res.json();
+    if (!res.ok) throw new Error(q.error);
+    document.title = q.number;
+    page.innerHTML = `
+      <div class="head">
+        <h1>ใบเสนอราคา<br><small style="font-size:.9rem;color:var(--muted);font-weight:400">Quotation</small></h1>
+        <dl>
+          <dt>เลขที่</dt><dd>${esc(q.number)}</dd>
+          <dt>วันที่</dt><dd>${new Date(q.issue_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}</dd>
+        </dl>
+      </div>
+      <div class="to">
+        <div class="label">เสนอราคาให้</div>
+        <div class="name">${esc(q.customer_name)}</div>
+        <div class="addr">${esc(q.customer_address)}</div>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>รายการ</th><th class="r">จำนวน</th><th class="r">ราคา/หน่วย</th><th class="r">รวม</th></tr></thead>
+        <tbody>${q.items.map((it, i) => `
+          <tr><td>${i + 1}</td><td>${esc(it.description)}</td><td class="r">${it.qty}</td>
+          <td class="r">${fmt.format(it.unit_price)}</td><td class="r">${fmt.format(it.qty * it.unit_price)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="sum">
+        <div><span>ยอดก่อน VAT</span><span>${fmt.format(q.subtotal)}</span></div>
+        <div><span>VAT ${q.vat_rate}%</span><span>${fmt.format(q.vat)}</span></div>
+        <div class="total"><span>ยอดรวมสุทธิ</span><span>${fmt.format(q.total)}</span></div>
+      </div>
+      ${q.note ? `<div class="note"><div class="label">หมายเหตุ</div>${esc(q.note)}</div>` : ''}`;
+  } catch (e) {
+    page.innerHTML = `<div class="error">${esc(e.message || 'โหลดใบเสนอราคาไม่สำเร็จ')}</div>`;
+  }
+})();
+</script>
+</body>
+</html>
